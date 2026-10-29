@@ -1,0 +1,10 @@
+# Must exactly match the server name registered in BungeeCord proxy config.yml
+lobby-server: "lobby"
+countdown-seconds: 3
+messages:
+  countdown: "&eSending you to lobby in &c%seconds%&e seconds..."
+  connecting: "&aConnecting to lobby..."
+  already-there: "&eYou are already in the lobby."
+  already-counting: "&cLobby teleport is already in progress."
+  missing-server: "&cLobby server '&f%server%&c' is not registered in the proxy config."
+  player-only: "&cOnly players can use this command."

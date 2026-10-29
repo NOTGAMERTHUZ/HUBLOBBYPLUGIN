@@ -1,0 +1,5 @@
+name: NGTHub
+main: com.gamerthuz.ngthub.NGTHub
+version: 1.0.0
+author: GAMERTHUZ
+description: Countdown /hub and /lobby commands for BungeeCord
