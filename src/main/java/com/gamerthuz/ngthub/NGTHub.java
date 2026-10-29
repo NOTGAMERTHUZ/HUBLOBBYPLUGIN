@@ -1,3 +1,4 @@
+
 package com.gamerthuz.ngthub;
 
 import net.md_5.bungee.api.ChatColor;
@@ -27,18 +28,24 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 public final class NGTHub extends Plugin implements Listener {
-    private final Map<UUID, ScheduledTask> activeCountdowns = new ConcurrentHashMap<>();
+
+    private final Map<UUID, ScheduledTask> activeCountdowns =
+            new ConcurrentHashMap<>();
     private final Set<UUID> inProgress = ConcurrentHashMap.newKeySet();
 
     private String lobbyServer = "lobby";
     private int countdownSeconds = 3;
-    private String countdownMessage = "&eSending you to lobby in &c%seconds%&e seconds...";
+    private String countdownMessage =
+            "&eSending you to lobby in &c%seconds%&e seconds...";
     private String connectingMessage = "&aConnecting to lobby...";
     private String alreadyThereMessage = "&eYou are already in the lobby.";
-    private String alreadyCountingMessage = "&cLobby teleport is already in progress.";
-    private String missingServerMessage = "&cLobby server '&f%server%&c' is not registered in the proxy config.";
+    private String alreadyCountingMessage =
+            "&cLobby teleport is already in progress.";
+    private String missingServerMessage =
+            "&cLobby server '&f%server%&c' is not registered in the proxy config.";
     private String playerOnlyMessage = "&cOnly players can use this command.";
-    private String connectionFailedMessage = "&cCould not connect to the lobby. Please try again.";
+    private String connectionFailedMessage =
+            "&cCould not connect to the lobby. Please try again.";
 
     @Override
     public void onEnable() {
@@ -48,8 +55,7 @@ public final class NGTHub extends Plugin implements Listener {
         getProxy().getPluginManager().registerCommand(this, new LobbyCommand("lobby"));
         getProxy().getPluginManager().registerListener(this, this);
 
-        getLogger().info("NGTHub enabled: /hub and /lobby -> " + lobbyServer
-                + " (" + countdownSeconds + "s countdown)");
+        getLogger().info("NGTHub enabled: /hub and /lobby -> " + lobbyServer);
     }
 
     @Override
@@ -67,6 +73,7 @@ public final class NGTHub extends Plugin implements Listener {
         }
 
         File file = new File(getDataFolder(), "config.yml");
+
         if (!file.exists()) {
             try (InputStream in = getResourceAsStream("config.yml")) {
                 if (in != null) {
@@ -78,22 +85,32 @@ public final class NGTHub extends Plugin implements Listener {
         }
 
         try {
-            Configuration c = ConfigurationProvider.getProvider(YamlConfiguration.class).load(file);
-            lobbyServer = c.getString("lobby-server", "lobby").trim();
-            if (lobbyServer.isEmpty()) lobbyServer = "lobby";
+            Configuration c = ConfigurationProvider
+                    .getProvider(YamlConfiguration.class).load(file);
 
-            countdownSeconds = Math.max(0, Math.min(30, c.getInt("countdown-seconds", 3)));
+            lobbyServer = c.getString("lobby-server", "lobby").trim();
+            if (lobbyServer.isEmpty()) {
+                lobbyServer = "lobby";
+            }
+
+            countdownSeconds = Math.max(
+                    0, Math.min(30, c.getInt("countdown-seconds", 3)));
+
             countdownMessage = c.getString("messages.countdown",
                     "&eSending you to lobby in &c%seconds%&e seconds...");
-            connectingMessage = c.getString("messages.connecting", "&aConnecting to lobby...");
-            alreadyThereMessage = c.getString("messages.already-there", "&eYou are already in the lobby.");
+            connectingMessage = c.getString("messages.connecting",
+                    "&aConnecting to lobby...");
+            alreadyThereMessage = c.getString("messages.already-there",
+                    "&eYou are already in the lobby.");
             alreadyCountingMessage = c.getString("messages.already-counting",
                     "&cLobby teleport is already in progress.");
             missingServerMessage = c.getString("messages.missing-server",
                     "&cLobby server '&f%server%&c' is not registered in the proxy config.");
-            playerOnlyMessage = c.getString("messages.player-only", "&cOnly players can use this command.");
+            playerOnlyMessage = c.getString("messages.player-only",
+                    "&cOnly players can use this command.");
             connectionFailedMessage = c.getString("messages.connection-failed",
                     "&cCould not connect to the lobby. Please try again.");
+
         } catch (IOException e) {
             getLogger().severe("Failed to read config.yml: " + e.getMessage());
         }
@@ -103,18 +120,19 @@ public final class NGTHub extends Plugin implements Listener {
         UUID id = player.getUniqueId();
 
         ServerInfo target = ProxyServer.getInstance().getServerInfo(lobbyServer);
+
         if (target == null) {
             send(player, missingServerMessage.replace("%server%", lobbyServer));
             return;
         }
 
         if (player.getServer() != null
-                && player.getServer().getInfo().getName().equalsIgnoreCase(lobbyServer)) {
+                && player.getServer().getInfo().getName()
+                .equalsIgnoreCase(lobbyServer)) {
             send(player, alreadyThereMessage);
             return;
         }
 
-        // Set this first so repeated commands cannot start duplicate countdowns/connections.
         if (!inProgress.add(id)) {
             send(player, alreadyCountingMessage);
             return;
@@ -125,10 +143,11 @@ public final class NGTHub extends Plugin implements Listener {
             return;
         }
 
-        send(player, countdownMessage.replace("%seconds%", Integer.toString(countdownSeconds)));
+        send(player, countdownMessage.replace(
+                "%seconds%", Integer.toString(countdownSeconds)));
+
         final int[] remaining = {countdownSeconds - 1};
 
-        // First scheduled tick is one second later, avoiding a schedule/map registration race.
         ScheduledTask task = getProxy().getScheduler().schedule(this, () -> {
             if (!player.isConnected()) {
                 cancelPlayerState(id);
@@ -136,13 +155,20 @@ public final class NGTHub extends Plugin implements Listener {
             }
 
             if (remaining[0] > 0) {
-                send(player, countdownMessage.replace("%seconds%", Integer.toString(remaining[0])));
+                send(player, countdownMessage.replace(
+                        "%seconds%", Integer.toString(remaining[0])));
                 remaining[0]--;
                 return;
             }
 
-            activeCountdowns.remove(id);
+            // IMPORTANT FIX: cancel repeating task before connecting.
+            ScheduledTask finishedTask = activeCountdowns.remove(id);
+            if (finishedTask != null) {
+                finishedTask.cancel();
+            }
+
             connectToLobby(player, target);
+
         }, 1, 1, TimeUnit.SECONDS);
 
         activeCountdowns.put(id, task);
@@ -150,25 +176,32 @@ public final class NGTHub extends Plugin implements Listener {
 
     private void connectToLobby(ProxiedPlayer player, ServerInfo target) {
         send(player, connectingMessage);
+
         player.connect(target, (success, error) -> {
             if (!success) {
                 inProgress.remove(player.getUniqueId());
                 send(player, connectionFailedMessage);
+
                 if (error != null) {
-                    getLogger().warning("Lobby connection failed for " + player.getName()
-                            + ": " + error.getMessage());
+                    getLogger().warning("Lobby connection failed for "
+                            + player.getName() + ": " + error.getMessage());
                 }
             }
-            // On success, ServerConnectedEvent clears inProgress when the lobby connection completes.
+            // Successful connection is handled by ServerConnectedEvent.
         });
     }
 
     @EventHandler
     public void onServerConnected(ServerConnectedEvent event) {
-        if (event.getServer().getInfo().getName().equalsIgnoreCase(lobbyServer)) {
-            inProgress.remove(event.getPlayer().getUniqueId());
-            ScheduledTask task = activeCountdowns.remove(event.getPlayer().getUniqueId());
-            if (task != null) task.cancel();
+        if (event.getServer().getInfo().getName()
+                .equalsIgnoreCase(lobbyServer)) {
+            UUID id = event.getPlayer().getUniqueId();
+            inProgress.remove(id);
+
+            ScheduledTask task = activeCountdowns.remove(id);
+            if (task != null) {
+                task.cancel();
+            }
         }
     }
 
@@ -179,8 +212,11 @@ public final class NGTHub extends Plugin implements Listener {
 
     private void cancelPlayerState(UUID id) {
         inProgress.remove(id);
+
         ScheduledTask task = activeCountdowns.remove(id);
-        if (task != null) task.cancel();
+        if (task != null) {
+            task.cancel();
+        }
     }
 
     private static void send(ProxiedPlayer player, String message) {
@@ -189,17 +225,22 @@ public final class NGTHub extends Plugin implements Listener {
     }
 
     private final class LobbyCommand extends Command {
+
         LobbyCommand(String name) {
             super(name);
         }
 
         @Override
-        public void execute(net.md_5.bungee.api.CommandSender sender, String[] args) {
+        public void execute(
+                net.md_5.bungee.api.CommandSender sender, String[] args) {
+
             if (!(sender instanceof ProxiedPlayer player)) {
                 sender.sendMessage(TextComponent.fromLegacyText(
-                        ChatColor.translateAlternateColorCodes('&', playerOnlyMessage)));
+                        ChatColor.translateAlternateColorCodes(
+                                '&', playerOnlyMessage)));
                 return;
             }
+
             startLobbyTeleport(player);
         }
     }
